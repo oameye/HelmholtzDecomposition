@@ -1,4 +1,4 @@
-# HelmholtzDecomposition Package
+# HelmholtzDecomposition
 
 A Mathematica package for performing analytical Helmholtz decomposition of vector fields in n dimensions, following the approach in Richters and Glotz, "Analytical Helmholtz Decomposition of n-Dimensional Vector Fields" ([10.1016/j.jmaa.2023.127138](https://doi.org/10.1016/j.jmaa.2023.127138)).
 
