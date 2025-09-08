@@ -16,7 +16,21 @@ HelmholtzRotational::usage = "HelmholtzRotational[f, xvec] returns the rotationa
 
 HelmholtzDecomposition::usage = "HelmholtzDecomposition[f, xvec] returns {g, r} where f = g + r is the Helmholtz decomposition.";
 
+SetVerbose::usage = "SetVerbose[True/False] enables or disables verbose output during decomposition calculations.";
+
+GetVerbose::usage = "GetVerbose[] returns the current verbose setting.";
+
 Begin["`Private`"]
+
+(* Global verbose setting *)
+$PrintInfo = False;
+
+(* Functions to control verbose output *)
+SetVerbose[value_?BooleanQ] := ($PrintInfo = value);
+SetVerbose[value_] := (Message[SetVerbose::bool, value]; $Failed);
+SetVerbose::bool = "The argument `1` is not True or False.";
+
+GetVerbose[] := $PrintInfo;
 
 (* Integrals and Incomplete Laplacians *)
 
@@ -81,7 +95,7 @@ If[Q1 || Q3,
  u = 1;
  \[Lambda] = Ceiling[(Total[Exponent[S,xvec]] - Exponent[S,xvec[[m]]] + 1)/2]; (* nochmal checken ob M ein polynom ist *)
  W = IntegrateXmP[S, 2\[Lambda], m, xvec];
- If[PrintInfo, Print[S," in f",k," is partly monomial, use m=",m,", \[Lambda]=",\[Lambda]]];
+ If[$PrintInfo, Print[S," in f",k," is partly monomial, use m=",m,", \[Lambda]=",\[Lambda]]];
  Fij = CalculateFij[Singlef, k, m, \[Lambda], u, W, xvec, dim];
  Return[Fij]
 ];
@@ -96,7 +110,7 @@ If[Q4,
  m = k;
  W = S/v1;
  u = 1 + v2/v1;
- If[PrintInfo,Print[S," in f",k," can be solved with m=",m,", \[Lambda]=",\[Lambda],", W=",W,", u=",u]];
+ If[$PrintInfo,Print[S," in f",k," can be solved with m=",m,", \[Lambda]=",\[Lambda],", W=",W,", u=",u]];
  Fij = CalculateFij[Singlef, k, m, \[Lambda], u, W, xvec, dim];
  Return[Fij]
 ];
@@ -105,13 +119,12 @@ Abort[];
 ]; (* end of function AutocalculateSingleFij *)
 
 (* === AutocalculateFij[f] returns Fij for a given vector field f, if possible === *)
-AutocalculateFij[f_, xvec_, dim_] := Module[{M,Fij,Poly,PrintInfo,pol,k,i,j},
-PrintInfo=False; (* switch verbose printing on / off here *)
+AutocalculateFij[f_, xvec_, dim_] := Module[{M,Fij,Poly,pol,k,i,j},
 Fij = Table[0,{i,dim},{j,dim}]; (* initialize with 0 *)
 Do[
   Poly = Expand[f[[k]]];
   Poly = If[Head[Poly]===Plus, List@@Poly, List[Poly]]; (* Make sure Poly is a proper list, even if f[[k]] has only one summand *)
-  If[PrintInfo, Print["k=",k,": ",Poly]];
+  If[$PrintInfo, Print["k=",k,": ",Poly]];
   Do[
       M = Poly[[pol]];
       Fij = Fij + AutocalculateSingleFij[M,k,xvec,dim];
