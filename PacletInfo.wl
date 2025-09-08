@@ -1,8 +1,8 @@
 PacletObject[
     <|
         "Name" -> "HelmholtzDecomposition",
-        "Version" -> "0.0.1",
-        "WolframVersion" -> "14.2+",
+        "Version" -> "1.0.0",
+        "WolframVersion" -> "12.0+",
         "Extensions" ->
             {
                 {
