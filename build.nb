@@ -1,0 +1,76 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Wolfram 14.2' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       154,          7]
+NotebookDataLength[      2151,         66]
+NotebookOptionsPosition[      1582,         48]
+NotebookOutlinePosition[      1977,         64]
+CellTagsIndexPosition[      1934,         61]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+
+Cell[CellGroupData[{
+Cell[BoxData[
+ RowBox[{"PacletBuild", "[", 
+  RowBox[{"NotebookDirectory", "[", "]"}], "]"}]], "Input",
+ CellLabel->"In[4]:=",ExpressionUUID->"7ef2f7c8-fb1b-4a97-8a4b-77945955e24d"],
+
+Cell[BoxData[
+ TemplateBox[{
+  "NotebookDirectory", "nosv", 
+   "\"The notebook \\!\\(\\*TemplateBox[Association[RuleDelayed[\\\"obj\\\", \
+NotebookObject[\\\"32b84e9c-d2d0-407b-bb5f-0b5da5303ccc\\\", \
+\\\"8e298b2b-ee32-4106-aea5-a7dc0f646556\\\"]], Rule[\\\"label\\\", \
+\\\"\\\\\\\"Untitled-1\\\\\\\"\\\"]], \\\"NotebookObjectUUIDsUnsaved\\\"]\\) \
+is not saved.\"", 2, 4, 1, 21416700090396149993, "Local"},
+  "MessageTemplate",
+  BaseStyle->"MSG"]], "Message",
+ CellChangeTimes->{3.966333026326787*^9},
+ CellLabel->
+  "During evaluation of \
+In[4]:=",ExpressionUUID->"40810fe1-6ccd-4835-bf91-af8458f529c5"],
+
+Cell[BoxData[
+ RowBox[{"PacletBuild", "[", "$Failed", "]"}]], "Output",
+ CellChangeTimes->{3.9663330263412046`*^9},
+ CellLabel->"Out[4]=",ExpressionUUID->"647d9656-6a3f-42fd-89be-4ec5ad8aa929"]
+}, Open  ]]
+},
+WindowSize->{606, 683.25},
+WindowMargins->{{0, Automatic}, {Automatic, 0}},
+FrontEndVersion->"14.2 for Linux x86 (64-bit) (December 26, 2024)",
+StyleDefinitions->"Default.nb",
+ExpressionUUID->"32b84e9c-d2d0-407b-bb5f-0b5da5303ccc"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[CellGroupData[{
+Cell[576, 22, 181, 3, 29, "Input",ExpressionUUID->"7ef2f7c8-fb1b-4a97-8a4b-77945955e24d"],
+Cell[760, 27, 610, 13, 33, "Message",ExpressionUUID->"40810fe1-6ccd-4835-bf91-af8458f529c5"],
+Cell[1373, 42, 193, 3, 52, "Output",ExpressionUUID->"647d9656-6a3f-42fd-89be-4ec5ad8aa929"]
+}, Open  ]]
+}
+]
+*)
+
+(* End of internal cache information *)
+

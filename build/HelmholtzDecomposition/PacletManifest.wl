@@ -1,0 +1,70 @@
+<|
+    "Files"
+    ->
+    {
+        <|
+            "File"
+            ->
+            File[
+                "Kernel/HelmholtzDecomposition.wl"
+            ]
+            ,
+            "Hash"
+            ->
+            "59f78441ca25d51d200647d50fc0b8ddea4d33d8a1fb7aa465b08a3741eede04"
+                
+        |>
+        ,
+        <|
+            "File"
+            ->
+            File[
+                "TestFiles/examples.wlt"
+            ]
+            ,
+            "Hash"
+            ->
+            "c212c106122070284079e03b1272fc850bae1dd830e16b3c2aac65b6f500098f"
+                
+        |>
+        ,
+        <|
+            "File"
+            ->
+            File[
+                "TestFiles/getUniqueVariablesTests.wlt"
+            ]
+            ,
+            "Hash"
+            ->
+            "e6f050921ce722dadba1fc32625e26d7a088c2e730df59ed94e4bd91eaf162b1"
+                
+        |>
+        ,
+        <|
+            "File"
+            ->
+            File[
+                "TestFiles/runtest.wl"
+            ]
+            ,
+            "Hash"
+            ->
+            "976ea89af156e03c49b8d17dbeccdbc8909f53e1ca185319ed907c083cd3bb40"
+                
+        |>
+        ,
+        <|
+            "File"
+            ->
+            File[
+                "TestFiles/VerboseTest.wlt"
+            ]
+            ,
+            "Hash"
+            ->
+            "e4942ac15373a4be375d6e1f2b6837e8a28dc9da1bb39eef7c067a9790b57520"
+                
+        |>
+    }
+|>
