@@ -2,6 +2,13 @@
 
 A Mathematica package for performing analytical Helmholtz decomposition of vector fields in n dimensions, following the approach in Richters and Glotz, "Analytical Helmholtz Decomposition of n-Dimensional Vector Fields" ([10.1016/j.jmaa.2023.127138](https://doi.org/10.1016/j.jmaa.2023.127138)).
 
+## Install
+The package can be installed by running the following command in a Wolfram kernel:
+
+```mathematica
+PacletInstall["https://github.com/oameye/HelmholtzDecomposition/releases/download/v1.0.0/HelmholtzDecomposition-1.0.0.paclet"]
+```
+
 
 ## Quick Start
 
