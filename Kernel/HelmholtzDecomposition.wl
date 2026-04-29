@@ -157,8 +157,13 @@ autoSingleFij[S_, k_, xvec_, dim_, verb_] :=
     If[S === 0, Return[Table[0, {i, dim}, {j, dim}]]];
     Singlef = Table[S KroneckerDelta[i, k], {i, dim}];
     xiWithoutxk = Intersection[xvec, DeleteCases[uniqueVars[S], xvec[[k]]]];
-    Q1 = PolynomialQ[S, xiWithoutxk];
-    Q2 = PolynomialQ[S, xvec] && Length[xiWithoutxk] == 1 &&
+    (* Q1 tests "polynomial in the spatial coordinates" — parameters in
+       the coefficients (rational, etc.) are treated as constants. The
+       earlier `PolynomialQ[S, xiWithoutxk]` form misfired when
+       xiWithoutxk was empty: PolynomialQ[expr, {}] enters auto-detect
+       mode and rejects rational-in-parameter expressions. *)
+    Q1 = PolynomialQ[S, xvec];
+    Q2 = Q1 && Length[xiWithoutxk] == 1 &&
          Exponent[S, First[xiWithoutxk]] > Exponent[S, xvec[[k]]];
     Q3 = PolynomialQ[S, xvec[[k]]] && Length[xiWithoutxk] == 1;
     If[Q1 || Q3,

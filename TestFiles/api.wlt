@@ -203,4 +203,26 @@ VerificationTest[
   TestID -> "Keys[hd] equals hd[\"Properties\"]"
 ];
 
+(* Regression: rational-in-parameter coefficients on linear monomial.
+   Pre-fix the package threw HelmholtzDecomposition::nodec because
+   PolynomialQ[x/(1+a^2), {}] returned False (auto-detect mode rejects
+   1/(1+a^2) as non-polynomial in {a}, even though we'd want a treated
+   as a parameter). *)
+VerificationTest[
+  Module[{hd, P},
+    hd = HelmholtzDecomposition[{x/(1 + a^2), 0}, {x, y}];
+    P = hd["Potential"];
+    Simplify[Grad[P, {x, y}] - hd["Gradient"]]
+  ],
+  {0, 0},
+  TestID -> "Linear term with rational-in-parameter coefficient"
+];
+
+VerificationTest[
+  Head @ HelmholtzDecomposition[
+    {(x^2 + y)/(1 + a^2), x y/(1 + b^2)}, {x, y}],
+  HelmholtzDecomposition,
+  TestID -> "Mixed polynomial with parameter-rational coefficients"
+];
+
 EndTestSection[]

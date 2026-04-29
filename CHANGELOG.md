@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.1
+
+Bug fix.
+
+- **`AutocalculateSingleFij` rejected polynomial terms with rational-in-parameter coefficients** (e.g. `x / (1 + a^2)`). Cause: `PolynomialQ[S, xiWithoutxk]` with `xiWithoutxk == {}` enters Mathematica's auto-detect mode and refuses any expression with a rational sub-piece, even when the rational dependence is on parameters not in the coordinate list. Fix: test `PolynomialQ[S, xvec]` instead — checks polynomiality in the spatial coordinates, with parameters treated as constants. Two regression tests added in `api.wlt`.
+
 ## v2.0.0
 
 Major rewrite: one entry point, queryable result object.
