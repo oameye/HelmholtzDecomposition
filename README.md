@@ -1,52 +1,87 @@
 # HelmholtzDecomposition
 
-A Mathematica package for performing analytical Helmholtz decomposition of vector fields in n dimensions, following the approach in Richters and Glotz, "Analytical Helmholtz Decomposition of n-Dimensional Vector Fields" ([10.1016/j.jmaa.2023.127138](https://doi.org/10.1016/j.jmaa.2023.127138)).
+A Mathematica package for the analytical Helmholtz decomposition of vector fields in n dimensions, following Richters & Glötzl, *Analytical Helmholtz Decomposition of n-Dimensional Vector Fields* ([10.1016/j.jmaa.2023.127138](https://doi.org/10.1016/j.jmaa.2023.127138)). Given `f`, the decomposition
+
+```
+f = g + r,    Curl[g] = 0,    Div[r] = 0
+```
+
+is constructed from a potential matrix `Fij`, with the scalar potential `P` (such that `g = ∇P`) and the antisymmetric matrix `Rij` (whose row-divergence is `r`) made directly available.
 
 ## Install
-The package can be installed by running the following command in a Wolfram kernel:
 
 ```mathematica
-PacletInstall["https://github.com/oameye/HelmholtzDecomposition/releases/download/v1.0.0/HelmholtzDecomposition-1.0.0.paclet"]
+PacletInstall["https://github.com/oameye/HelmholtzDecomposition/releases/download/v1.1.0/HelmholtzDecomposition-1.1.0.paclet"]
 ```
 
-
-## Quick Start
+Or, working from a checkout:
 
 ```mathematica
-(* Load the package *)
+PacletDirectoryLoad["/path/to/HelmholtzDecomposition"];
+Needs["HelmholtzDecomposition`"];
+```
+
+## Quick start
+
+```mathematica
 Needs["HelmholtzDecomposition`"];
 
-(* Define your coordinate variables *)
-x = Subscript[x, 1]; y = Subscript[x, 2];
+f = {x^2 + y, x y};
 
-(* Your vector field *)
-f = {x^2 + y, x*y};
-coords = {x, y};
+(* Coordinates auto-detected from f *)
+{g, r} = HelmholtzDecomposition[f];
 
-(* Complete decomposition with output *)
-PrintHelmholtz[f, coords]
+(* Scalar potential P with Grad[P] == g *)
+P = HelmholtzPotential[f];
 
-(* Direct access to components *)
-{gradient, rotational} = HelmholtzDecomposition[f, coords];
+(* Everything in one shot, computed once and cached *)
+data = HelmholtzAssociation[f];
+data["Potential"]              (* P *)
+data["VectorPotentialMatrix"]  (* Rij *)
+data["Residual"]               (* should be {0, 0} *)
 ```
 
-## Main Functions
+## API
 
-One defines variables:
-- `f`: Vector field as a list (e.g., `{x^2, y^2}`)
-- `xvec`: Coordinate variables as a list (e.g., `{x, y}`)
+| Function | Returns |
+|---|---|
+| `HelmholtzDecomposition[f, xvec]` | `{g, r}` (gradient and rotational components) |
+| `HelmholtzGradient[f, xvec]` | `g` (curl-free component) |
+| `HelmholtzRotational[f, xvec]` | `r` (divergence-free component) |
+| `HelmholtzPotential[f, xvec]` | scalar `P` with `Grad[P, xvec] == g` |
+| `HelmholtzVectorPotential[f, xvec]` | antisymmetric matrix `Rij` whose row-divergence is `r` |
+| `HelmholtzAssociation[f, xvec]` | `Association` with all of the above plus `"PotentialMatrix"`, `"Residual"`, `"Coordinates"`, `"Field"` |
+| `PrintHelmholtz[f, xvec]` | prints a diagnostic block **and returns the same Association** |
+| `PrintHelmholtz[assoc]` | prints diagnostic for an already-computed Association (no recomputation) |
 
-The package as the following main functions:
-- `HelmholtzDecomposition[f, xvec]`: Returns `{gradient, rotational}` components as a list.
+The `xvec` argument is optional in every signature: omit it and the package extracts the coordinate symbols from `f`. Pass it explicitly when the field contains parameter symbols you don't want treated as coordinates.
 
-- `HelmholtzGradient[f, xvec]`: Returns only the gradient component.
+### Options
 
-- `HelmholtzRotational[f, xvec]`: Returns only the rotational component.
+All surface functions accept the following options:
 
-- `PrintHelmholtz[f, xvec]`: Displays the complete Helmholtz decomposition as in the original code of Richters and Glotz.
+- `Assumptions -> ...` — forwarded to the simplifier (`$Assumptions` by default). Important for parameterised fields where signs/positivity matter.
+- `Simplify -> FullSimplify | Simplify | Identity` — controls the simplifier applied to `g`, `r`, `P`, `Rij`. `Identity` skips simplification (fast, but verbose output).
 
-## Citation and License
+```mathematica
+HelmholtzPotential[{a x^2, b y}, {x, y}, Assumptions -> a > 0 && b > 0]
+HelmholtzAssociation[bigField, coords, Simplify -> Identity]
+```
 
-Any intellectual property rights of the original authors are fully respected. Please cite the original paper when using this code.
-- [Zenodo repository](https://zenodo.org/records/7680297) 
-- Erhard Glötzl, Oliver Richters. Helmholtz decomposition and potential functions for n-dimensional analytic vector fields. [10.1016/j.jmaa.2023.127138](https://doi.org/10.1016/j.jmaa.2023.127138)
+### Caching
+
+`HelmholtzAssociation[f, xvec, opts]` is memoized on the `(f, xvec, simplifier, assumptions)` tuple, so calling `HelmholtzPotential` and `HelmholtzGradient` back-to-back on the same field does the heavy `Fij` computation only once. All surface functions go through `HelmholtzAssociation` internally.
+
+### Verbose mode
+
+```mathematica
+SetVerbose[True];   (* trace which atoms hit which branch of AutocalculateFij *)
+GetVerbose[]
+```
+
+## Citation and license
+
+Please cite the original paper and Zenodo repository when using this code.
+
+- [Zenodo repository](https://zenodo.org/records/7680297)
+- Erhard Glötzl, Oliver Richters. *Helmholtz decomposition and potential functions for n-dimensional analytic vector fields*. [10.1016/j.jmaa.2023.127138](https://doi.org/10.1016/j.jmaa.2023.127138)
