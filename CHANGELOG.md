@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.1.0
+
+Feature release.
+
+- Added `HelmholtzGaugeShift`, a package-level helper that applies explicit harmonic gauge shifts to an existing `HelmholtzDecomposition` object.
+- Added gauge-aware properties: `"GaugeShift"`, `"GaugePotential"`, and `"CanonicalAssociation"`.
+- Gauge-shifted decompositions preserve `"Gradient"`, `"Rotational"`, `"Potential"`, and verification data while keeping the original canonical decomposition available for comparison.
+- Added API and failure-mode tests for harmonic scalar and harmonic vector gauge shifts.
+- Updated the README with gauge-shift usage and caveats.
+
 ## v2.0.1
 
 Bug fix.

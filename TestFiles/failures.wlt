@@ -41,6 +41,27 @@ VerificationTest[
   TestID -> "Caching -> non-boolean -> $Failed with message"
 ];
 
+VerificationTest[
+  HelmholtzGaugeShift[HelmholtzDecomposition[{x^2 + y, x y}, {x, y}], x^2],
+  $Failed,
+  {HelmholtzGaugeShift::badharm},
+  TestID -> "Non-harmonic scalar gauge -> $Failed with message"
+];
+
+VerificationTest[
+  HelmholtzGaugeShift[HelmholtzDecomposition[{x^2 + y, x y}, {x, y}], {1, 1, 1}],
+  $Failed,
+  {HelmholtzGaugeShift::badlen},
+  TestID -> "Gauge vector length mismatch -> $Failed with message"
+];
+
+VerificationTest[
+  HelmholtzGaugeShift[HelmholtzDecomposition[{x^2 + y, x y}, {x, y}], {x, 0}],
+  $Failed,
+  {HelmholtzGaugeShift::badharm},
+  TestID -> "Non-harmonic vector gauge -> $Failed with message"
+];
+
 (* MakeBoxes on a malformed bare Association does not crash *)
 VerificationTest[
   Head @ ToBoxes[HelmholtzDecomposition[<|"foo" -> 1|>], StandardForm],

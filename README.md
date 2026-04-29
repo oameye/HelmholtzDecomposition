@@ -6,12 +6,12 @@ Analytical Helmholtz decomposition of n-dimensional vector fields, following Ric
 f = g + r,    Curl[g] == 0,    Div[r] == 0
 ```
 
-is constructed once and exposed through a single function `HelmholtzDecomposition` returning a queryable result object.
+is constructed once and exposed through a queryable result object. A companion helper `HelmholtzGaugeShift` applies explicit harmonic gauge shifts to an existing decomposition.
 
 ## Install
 
 ```mathematica
-PacletInstall["https://github.com/oameye/HelmholtzDecomposition/releases/download/v2.0.0/HelmholtzDecomposition-2.0.0.paclet"]
+PacletInstall["https://github.com/oameye/HelmholtzDecomposition/releases/download/v2.1.0/HelmholtzDecomposition-2.1.0.paclet"]
 ```
 
 Or, working from a checkout:
@@ -34,6 +34,10 @@ hd["Potential"]                (* scalar P with Grad[P] == g *)
 hd["Verify"]                   (* <|GradientCurlFree -> True, ...|> *)
 
 List @@ hd                     (* {g, r}, handy for destructuring *)
+
+shifted = HelmholtzGaugeShift[hd, x + y];
+shifted["Gradient"]            (* g + {1, 1} *)
+shifted["CanonicalAssociation"]["Gradient"]   (* original canonical g *)
 ```
 
 ## API — one function, queryable result
@@ -53,6 +57,9 @@ The result has head `HelmholtzDecomposition` and renders as a collapsible summar
 | `"AntisymmetricPotential"` | the n-dimensional 2-form `Rij` whose row-divergence is `r` |
 | `"VectorPotentialA"` | (3D only) vector `A` with `Curl[A] == r` |
 | `"PotentialMatrix"` | the underlying potential matrix `Fij` |
+| `"GaugeShift"` | harmonic vector field shifted from `r` into `g` |
+| `"GaugePotential"` | scalar potential whose gradient equals `"GaugeShift"` |
+| `"CanonicalAssociation"` | ungauged underlying Association |
 | `"Residual"` | `f - g - r`, simplified |
 | `"Verify"` | `<|"GradientCurlFree", "RotationalDivergenceFree", "ResidualZero"|>` |
 | `"Field"`, `"Coordinates"` | the inputs |
@@ -75,6 +82,31 @@ HelmholtzDecomposition[f, xvec,
 
 `Identity` is special-cased so `SimplificationFunction -> Identity` skips simplification cleanly.
 
+## Gauge shifts
+
+```mathematica
+shifted = HelmholtzGaugeShift[hd, phi]   (* phi harmonic scalar *)
+shifted = HelmholtzGaugeShift[hd, h]     (* h harmonic vector field *)
+```
+
+This returns a new `HelmholtzDecomposition` object with
+
+```mathematica
+g' = g + h
+r' = r - h
+P' = P + phi
+```
+
+where `h = Grad[phi, xvec]`. The helper verifies the gauge input is harmonic:
+
+- scalar form: `Laplacian[phi, xvec] == 0`
+- vector form: `Curl[h] == 0` and `Div[h] == 0`
+
+The original canonical decomposition is preserved under
+`shifted["CanonicalAssociation"]`.
+
+Note: after a gauge shift, the matrix-level properties `"PotentialMatrix"` and `"AntisymmetricPotential"` are marked unavailable, because the package does not currently construct a closed-form coexact potential for the shifted rotational field.
+
 ### Caching
 
 Results are memoized by default on the tuple `(f, xvec, SimplificationFunction, Assumptions)`. Repeated calls cost effectively nothing. Drop the cache with `ClearHelmholtzCache[]` (returns the number of evicted entries), or pass `Caching -> False` for a single bypass.
@@ -89,6 +121,7 @@ The function returns `$Failed` (with a typed message under `HelmholtzDecompositi
 - query for an unknown property (`::nokey`)
 - query for `"VectorPotentialA"` outside 3D (`::baddim`)
 - non-boolean `Verbose` (`::badverbose`)
+- invalid harmonic gauge input to `HelmholtzGaugeShift` (`HelmholtzGaugeShift::badharm`, `::badlen`, `::badpot`)
 
 ## Notes
 

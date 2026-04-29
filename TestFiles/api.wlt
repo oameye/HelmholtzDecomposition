@@ -15,6 +15,7 @@ VerificationTest[
    "Gradient", "Rotational",
    "Potential", "AntisymmetricPotential", "PotentialMatrix",
    "VectorPotentialA",
+   "GaugeShift", "GaugePotential", "CanonicalAssociation",
    "Residual", "Verify"},
   TestID -> "Properties list"
 ];
@@ -53,6 +54,24 @@ VerificationTest[
   HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["Coordinates"],
   {x, y},
   TestID -> "[\"Coordinates\"] returns input"
+];
+
+VerificationTest[
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["GaugeShift"],
+  {0, 0},
+  TestID -> "[\"GaugeShift\"] defaults to zero"
+];
+
+VerificationTest[
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["GaugePotential"],
+  0,
+  TestID -> "[\"GaugePotential\"] defaults to zero"
+];
+
+VerificationTest[
+  AssociationQ @ HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["CanonicalAssociation"],
+  True,
+  TestID -> "[\"CanonicalAssociation\"] is available on canonical objects"
 ];
 
 (* ---- Verify ---- *)
@@ -125,6 +144,70 @@ VerificationTest[
             SimplificationFunction -> Identity],
   HelmholtzDecomposition,
   TestID -> "SimplificationFunction -> Identity returns valid object"
+];
+
+(* ---- gauge shifting ---- *)
+
+VerificationTest[
+  Module[{hd, shifted},
+    hd = HelmholtzDecomposition[{x^2 + y, x y}, {x, y}];
+    shifted = HelmholtzGaugeShift[hd, x + y];
+    Simplify[shifted["Gradient"] - (hd["Gradient"] + {1, 1})]
+  ],
+  {0, 0},
+  TestID -> "HelmholtzGaugeShift[hd, phi]: gradient shifts by Grad[phi]"
+];
+
+VerificationTest[
+  Module[{hd, shifted},
+    hd = HelmholtzDecomposition[{x^2 + y, x y}, {x, y}];
+    shifted = HelmholtzGaugeShift[hd, x + y];
+    Simplify[shifted["Rotational"] - (hd["Rotational"] - {1, 1})]
+  ],
+  {0, 0},
+  TestID -> "HelmholtzGaugeShift[hd, phi]: rotational shifts oppositely"
+];
+
+VerificationTest[
+  Module[{hd, shifted},
+    hd = HelmholtzDecomposition[{x^2 + y, x y}, {x, y}];
+    shifted = HelmholtzGaugeShift[hd, x + y];
+    Simplify[Grad[shifted["Potential"], {x, y}] - shifted["Gradient"]]
+  ],
+  {0, 0},
+  TestID -> "HelmholtzGaugeShift[hd, phi]: shifted potential matches shifted gradient"
+];
+
+VerificationTest[
+  Module[{hd, shifted},
+    hd = HelmholtzDecomposition[{x^2 + y, x y}, {x, y}];
+    shifted = HelmholtzGaugeShift[hd, {1, 1}];
+    Simplify[shifted["GaugePotential"] - (x + y)]
+  ],
+  0,
+  TestID -> "HelmholtzGaugeShift[hd, h]: reconstructs scalar potential from harmonic vector"
+];
+
+VerificationTest[
+  Module[{hd, shifted},
+    hd = HelmholtzDecomposition[{x^2 + y, x y}, {x, y}];
+    shifted = HelmholtzGaugeShift[hd, x + y];
+    shifted["Verify"]
+  ],
+  <|"GradientCurlFree" -> True,
+    "RotationalDivergenceFree" -> True,
+    "ResidualZero" -> True|>,
+  TestID -> "HelmholtzGaugeShift preserves verification checks"
+];
+
+VerificationTest[
+  Module[{hd, shifted},
+    hd = HelmholtzDecomposition[{x^2 + y, x y}, {x, y}];
+    shifted = HelmholtzGaugeShift[hd, x + y];
+    Simplify[shifted["CanonicalAssociation"]["Gradient"] - hd["Gradient"]]
+  ],
+  {0, 0},
+  TestID -> "[\"CanonicalAssociation\"] preserves the original decomposition"
 ];
 
 (* ---- caching ---- *)

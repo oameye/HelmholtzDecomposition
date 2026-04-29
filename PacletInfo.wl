@@ -1,7 +1,7 @@
 PacletObject[
     <|
         "Name" -> "HelmholtzDecomposition",
-        "Version" -> "2.0.1",
+        "Version" -> "2.1.0",
         "WolframVersion" -> "12.0+",
         "Description" -> "Analytical Helmholtz decomposition of n-dimensional vector fields (Richters & Glotzl, 2023).",
         "Creator" -> "Orjan Ameye",

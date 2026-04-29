@@ -26,6 +26,9 @@ HelmholtzDecomposition::usage =
   "  \"Residual\"               f - g - r, simplified\n" <>
   "  \"Field\"                  the input f\n" <>
   "  \"Coordinates\"            the input xvec\n" <>
+  "  \"GaugeShift\"             harmonic vector field moved from rotational to gradient sector\n" <>
+  "  \"GaugePotential\"         scalar potential whose gradient equals \"GaugeShift\"\n" <>
+  "  \"CanonicalAssociation\"   the underlying ungauged Association\n" <>
   "  \"Verify\"                 <| GradientCurlFree, RotationalDivergenceFree, ResidualZero |> -- always uses FullSimplify regardless of SimplificationFunction\n" <>
   "  \"Properties\"             list of available property names\n" <>
   "  \"Association\"            the raw underlying Association";
@@ -33,6 +36,12 @@ HelmholtzDecomposition::usage =
 ClearHelmholtzCache::usage =
   "ClearHelmholtzCache[] empties the memoization cache of HelmholtzDecomposition. " <>
   "Returns the number of entries removed.";
+
+HelmholtzGaugeShift::usage =
+  "HelmholtzGaugeShift[hd, phi] returns a new HelmholtzDecomposition object obtained " <>
+  "from hd by shifting a harmonic scalar potential phi from the rotational sector into the gradient sector. " <>
+  "HelmholtzGaugeShift[hd, h] accepts a harmonic vector field h instead; it reconstructs phi from h by line integration. " <>
+  "The shifted object preserves the original decomposition under the property \"CanonicalAssociation\".";
 
 (* Options live on the constructor head only *)
 Options[HelmholtzDecomposition] = {
@@ -70,6 +79,15 @@ HelmholtzDecomposition::badcache =
 
 HelmholtzDecomposition::badtc =
   "TimeConstraint -> `1` is not Infinity or a positive number.";
+
+HelmholtzGaugeShift::badlen =
+  "Gauge vector length `1` does not match the field dimension `2`.";
+
+HelmholtzGaugeShift::badharm =
+  "Gauge input `1` is not harmonic: the proposed shift must be curl-free and divergence-free (vector form) or Laplacian-free (scalar form).";
+
+HelmholtzGaugeShift::badpot =
+  "Gauge vector `1` is curl-free and divergence-free, but the reconstructed scalar potential does not differentiate back to it under the current assumptions.";
 
 Begin["`Private`"]
 
@@ -212,6 +230,11 @@ autoFij[f_, xvec_, dim_, verb_] :=
 applySimp[Identity, expr_, _, _] := expr;
 applySimp[simp_, expr_, asm_, tc_] := simp[expr, asm, TimeConstraint -> tc];
 
+radialPrimitive[field_, xvec_, asm_, tc_] :=
+  applySimp[FullSimplify,
+    Integrate[(field /. Thread[xvec -> s xvec]).xvec, {s, 0, 1}],
+    asm, tc];
+
 scalarPotential[Fij_, simp_, asm_, tc_] :=
   applySimp[simp, Sum[Fij[[k, k]], {k, Length[Fij]}], asm, tc];
 
@@ -257,6 +280,67 @@ hdCompute[f_, xvec_, simp_, asm_, verb_, tc_] :=
     |>
   ];
 
+curlMatrixOf[field_, xvec_, asm_, tc_] :=
+  FullSimplify[
+    Table[D[field[[i]], xvec[[j]]] - D[field[[j]], xvec[[i]]], {i, Length[field]}, {j, Length[field]}],
+    asm, TimeConstraint -> tc
+  ];
+
+verifyData[f_, g_, r_, xvec_, asm_, tc_] :=
+  Module[{residual, curlMatrix, divR},
+    residual = FullSimplify[f - g - r, asm, TimeConstraint -> tc];
+    curlMatrix = curlMatrixOf[g, xvec, asm, tc];
+    divR = FullSimplify[Sum[D[r[[i]], xvec[[i]]], {i, Length[r]}], asm, TimeConstraint -> tc];
+    <|
+      "Residual" -> residual,
+      "Verify" -> <|
+        "GradientCurlFree"         -> curlMatrix === ConstantArray[0, Dimensions[curlMatrix]],
+        "RotationalDivergenceFree" -> divR === 0,
+        "ResidualZero"             -> residual === ConstantArray[0, Length[f]]
+      |>
+    |>
+  ];
+
+canonicalAssociation[a_Association] := Lookup[a, "CanonicalAssociation", a];
+
+gaugeShiftData[h_, phi_, xvec_, asm_, tc_] :=
+  <|
+    "GaugeShift" -> applySimp[FullSimplify, h, asm, tc],
+    "GaugePotential" -> applySimp[FullSimplify, phi, asm, tc]
+  |>;
+
+applyGaugeShiftToAssociation[a_Association, h_, phi_, asm_, tc_] :=
+  Module[{f, xvec, gNew, rNew, pNew, checks, gaugeData},
+    f = a["Field"];
+    xvec = a["Coordinates"];
+    gNew = applySimp[FullSimplify, a["Gradient"] + h, asm, tc];
+    rNew = applySimp[FullSimplify, a["Rotational"] - h, asm, tc];
+    pNew = applySimp[FullSimplify, a["Potential"] + phi, asm, tc];
+    checks = verifyData[f, gNew, rNew, xvec, asm, tc];
+    gaugeData = gaugeShiftData[h, phi, xvec, asm, tc];
+    HelmholtzDecomposition[<|
+      "Field" -> f,
+      "Coordinates" -> xvec,
+      "Gradient" -> gNew,
+      "Rotational" -> rNew,
+      "Potential" -> pNew,
+      "AntisymmetricPotential" -> Missing["GaugeAdjustedUnavailable"],
+      "PotentialMatrix" -> Missing["GaugeAdjustedUnavailable"],
+      "Residual" -> checks["Residual"],
+      "Verify" -> checks["Verify"],
+      "GaugeShift" -> gaugeData["GaugeShift"],
+      "GaugePotential" -> gaugeData["GaugePotential"],
+      "CanonicalAssociation" -> canonicalAssociation[a]
+    |>]
+  ];
+
+harmonicScalarQ[phi_, xvec_, asm_, tc_] :=
+  FullSimplify[Laplacian[phi, xvec], asm, TimeConstraint -> tc] === 0;
+
+harmonicVectorQ[h_, xvec_, asm_, tc_] :=
+  curlMatrixOf[h, xvec, asm, tc] === ConstantArray[0, {Length[h], Length[h]}] &&
+  FullSimplify[Sum[D[h[[i]], xvec[[i]]], {i, Length[h]}], asm, TimeConstraint -> tc] === 0;
+
 (* ============================================================ *)
 (* Public constructor                                            *)
 (* ============================================================ *)
@@ -293,6 +377,36 @@ HelmholtzDecomposition[f_?VectorQ, opts:OptionsPattern[]] :=
     If[xv === $Failed, $Failed, HelmholtzDecomposition[f, xv, opts]]
   ];
 
+HelmholtzGaugeShift[HelmholtzDecomposition[a_Association], phi_, asm_: True, tc_: Infinity] /; !ListQ[phi] :=
+  Module[{xvec, h},
+    xvec = a["Coordinates"];
+    If[!harmonicScalarQ[phi, xvec, asm, tc],
+      Message[HelmholtzGaugeShift::badharm, phi];
+      Return[$Failed]
+    ];
+    h = applySimp[FullSimplify, Grad[phi, xvec], asm, tc];
+    applyGaugeShiftToAssociation[a, h, phi, asm, tc]
+  ];
+
+HelmholtzGaugeShift[HelmholtzDecomposition[a_Association], h_List, asm_: True, tc_: Infinity] :=
+  Module[{xvec, phi},
+    xvec = a["Coordinates"];
+    If[Length[h] =!= Length[xvec],
+      Message[HelmholtzGaugeShift::badlen, Length[h], Length[xvec]];
+      Return[$Failed]
+    ];
+    If[!harmonicVectorQ[h, xvec, asm, tc],
+      Message[HelmholtzGaugeShift::badharm, h];
+      Return[$Failed]
+    ];
+    phi = radialPrimitive[h, xvec, asm, tc];
+    If[applySimp[FullSimplify, Grad[phi, xvec] - h, asm, tc] =!= ConstantArray[0, Length[h]],
+      Message[HelmholtzGaugeShift::badpot, h];
+      Return[$Failed]
+    ];
+    applyGaugeShiftToAssociation[a, h, phi, asm, tc]
+  ];
+
 (* ============================================================ *)
 (* Property dispatch                                             *)
 (*                                                               *)
@@ -308,6 +422,7 @@ $validProps = {
   "Gradient", "Rotational",
   "Potential", "AntisymmetricPotential", "PotentialMatrix",
   "VectorPotentialA",
+  "GaugeShift", "GaugePotential", "CanonicalAssociation",
   "Residual", "Verify"
 };
 
@@ -316,8 +431,12 @@ $validProps = {
    stored-Association lookup. *)
 dispatch[a_, "Properties"]  := $validProps;
 dispatch[a_, "Association"] := a;
+dispatch[a_, "GaugeShift"] := Lookup[a, "GaugeShift", ConstantArray[0, Length[a["Field"]]]];
+dispatch[a_, "GaugePotential"] := Lookup[a, "GaugePotential", 0];
+dispatch[a_, "CanonicalAssociation"] := canonicalAssociation[a];
 dispatch[a_, "VectorPotentialA"] :=
   Module[{Rij = a["AntisymmetricPotential"], n = Length[a["Field"]]},
+    If[MissingQ[Rij], Return[Rij]];
     If[n =!= 3,
       Message[HelmholtzDecomposition::baddim, "VectorPotentialA", 3, n];
       $Failed,
@@ -368,6 +487,7 @@ HelmholtzDecomposition /: MakeBoxes[hd:HelmholtzDecomposition[a_Association?well
     },
     {
       BoxForm`SummaryItem[{"potential: ", Short[a["Potential"], 1]}],
+      BoxForm`SummaryItem[{"gauge-adjusted: ", KeyExistsQ[a, "GaugePotential"]}],
       BoxForm`SummaryItem[{"all checks pass: ", AllTrue[a["Verify"], TrueQ]}]
     },
     form
