@@ -1,0 +1,36 @@
+Notebook[{Cell["HelmholtzDecomposition tutorial", "Title"], 
+  Cell["Introduction", "Section"], Cell["Every smooth vector field f on a \
+star-shaped domain admits a decomposition", "Text"], 
+  Cell["    f = g + r,    Curl[g] == 0,    Div[r] == 0,", "Text"], 
+  Cell["with g a gradient and r divergence-free. The Richters-Glotzl \
+construction makes this analytic for fields built from polynomial, \
+exponential, sine and cosine atoms in any number of dimensions.", "Text"], 
+  Cell["Quick start", "Section"], 
+  Cell[BoxData["Needs[\"HelmholtzDecomposition`\"]"], "Input"], 
+  Cell[BoxData["hd = HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]"], 
+   "Input"], Cell["The result is a wrapped object. Query it via properties:", 
+   "Text"], Cell[BoxData["hd[\"Gradient\"]"], "Input"], 
+  Cell[BoxData["hd[\"Rotational\"]"], "Input"], 
+  Cell[BoxData["hd[\"Potential\"]"], "Input"], 
+  Cell["Verifying a decomposition", "Section"], 
+  Cell["The Verify property reports the three sanity checks:", "Text"], 
+  Cell[BoxData["hd[\"Verify\"]"], "Input"], Cell["Working with parameters", 
+   "Section"], Cell["Pass Assumptions to control simplification:", "Text"], 
+  Cell[BoxData["HelmholtzDecomposition[{a x^2, b y}, {x, y},\n  Assumptions \
+-> a > 0 && b > 0][\"Potential\"]"], "Input"], Cell["3D vector potential", 
+   "Section"], Cell["In three dimensions you can recover the conventional \
+vector potential A with Curl[A] == r:", "Text"], 
+  Cell[BoxData["hd3 = HelmholtzDecomposition[{-y - z, x, 0}, {x, y, z}];"], 
+   "Input"], Cell[BoxData["A = hd3[\"VectorPotentialA\"]"], "Input"], 
+  Cell[BoxData["Curl[A, {x, y, z}] - hd3[\"Rotational\"]"], "Input"], 
+  Cell["Cache management", "Section"], 
+  Cell["Repeated calls on the same field reuse cached results:", "Text"], 
+  Cell[BoxData[
+    "First @ AbsoluteTiming @ HelmholtzDecomposition[{x^3 y, x y^2}, {x, y}]"]\
+, "Input"], 
+  Cell[BoxData[
+    "First @ AbsoluteTiming @ HelmholtzDecomposition[{x^3 y, x y^2}, {x, y}]"]\
+, "Input"], Cell["Drop the cache when memory matters:", "Text"], 
+  Cell[BoxData["ClearHelmholtzCache[]"], "Input"]}, 
+ StyleDefinitions -> FrontEnd`FileName[{"Wolfram"}, "Tutorial.nb", 
+   CharacterEncoding -> "UTF-8"]]

@@ -1,109 +1,206 @@
-BeginTestSection["API"];
+BeginTestSection["API v2"];
 Needs["HelmholtzDecomposition`"];
 
-(* HelmholtzDecomposition still returns {g, r} (backward compat) *)
+(* ---- shape of the result ---- *)
+
 VerificationTest[
-  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}],
-  {{x^2 + y^2/2, x y}, {-(1/2) (-2 + y) y, 0}},
-  TestID -> "HelmholtzDecomposition list form preserved"
+  Head @ HelmholtzDecomposition[{x^2 + y, x y}, {x, y}],
+  HelmholtzDecomposition,
+  TestID -> "Result has head HelmholtzDecomposition"
 ];
 
 VerificationTest[
-  HelmholtzGradient[{x^2 + y, x y}, {x, y}],
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["Properties"],
+  {"Properties", "Association", "Field", "Coordinates",
+   "Gradient", "Rotational",
+   "Potential", "AntisymmetricPotential", "PotentialMatrix",
+   "VectorPotentialA",
+   "Residual", "Verify"},
+  TestID -> "Properties list"
+];
+
+(* ---- property access ---- *)
+
+VerificationTest[
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["Gradient"],
   {x^2 + y^2/2, x y},
-  TestID -> "HelmholtzGradient component"
+  TestID -> "[\"Gradient\"]"
 ];
 
 VerificationTest[
-  HelmholtzRotational[{x^2 + y, x y}, {x, y}],
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["Rotational"],
   {-(1/2) (-2 + y) y, 0},
-  TestID -> "HelmholtzRotational component"
+  TestID -> "[\"Rotational\"]"
 ];
 
-(* HelmholtzPotential is a primitive of HelmholtzGradient *)
 VerificationTest[
-  Module[{P, g},
-    P = HelmholtzPotential[{x^2 + y, x y}, {x, y}];
-    g = HelmholtzGradient[{x^2 + y, x y}, {x, y}];
+  Module[{hd, P, g},
+    hd = HelmholtzDecomposition[{x^2 + y, x y}, {x, y}];
+    P = hd["Potential"]; g = hd["Gradient"];
     Simplify[Grad[P, {x, y}] - g]
   ],
   {0, 0},
-  TestID -> "HelmholtzPotential is a primitive of HelmholtzGradient"
+  TestID -> "[\"Potential\"] is a primitive of [\"Gradient\"]"
 ];
 
 VerificationTest[
-  Sort@Keys@HelmholtzAssociation[{x^2 + y, x y}, {x, y}],
-  Sort@{"Gradient", "Rotational", "Potential",
-        "VectorPotentialMatrix", "PotentialMatrix",
-        "Residual", "Coordinates", "Field"},
-  TestID -> "HelmholtzAssociation keys"
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["Field"],
+  {x^2 + y, x y},
+  TestID -> "[\"Field\"] returns input"
 ];
 
 VerificationTest[
-  HelmholtzAssociation[{x^2 + y, x y}, {x, y}]["Residual"],
-  {0, 0},
-  TestID -> "Residual is zero"
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["Coordinates"],
+  {x, y},
+  TestID -> "[\"Coordinates\"] returns input"
 ];
 
-VerificationTest[
-  Head@PrintHelmholtz[{x^2 + y, x y}, {x, y}],
-  Association,
-  TestID -> "PrintHelmholtz returns Association"
-];
-
-(* Auto-detect coordinates from the field *)
-VerificationTest[
-  HelmholtzDecomposition[{x^2 + y, x y}],
-  {{x^2 + y^2/2, x y}, {-(1/2) (-2 + y) y, 0}},
-  TestID -> "Auto-detect coordinates"
-];
+(* ---- Verify ---- *)
 
 VerificationTest[
-  HelmholtzPotential[{x^2 + y, x y}],
-  HelmholtzPotential[{x^2 + y, x y}, {x, y}],
-  TestID -> "Auto-detect agrees with explicit coords"
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["Verify"],
+  <|"GradientCurlFree" -> True,
+    "RotationalDivergenceFree" -> True,
+    "ResidualZero" -> True|>,
+  TestID -> "[\"Verify\"] reports all checks"
 ];
 
-(* PrintHelmholtz on a precomputed Association reuses it *)
+(* ---- 3D vector potential A ---- *)
+
 VerificationTest[
-  Module[{a},
-    a = HelmholtzAssociation[{x^2 + y, x y}, {x, y}];
-    PrintHelmholtz[a] === a
+  Module[{hd, A, r},
+    hd = HelmholtzDecomposition[{-y - z, x, 0}, {x, y, z}];
+    A  = hd["VectorPotentialA"];
+    r  = hd["Rotational"];
+    Simplify[Curl[A, {x, y, z}] - r]
   ],
-  True,
-  TestID -> "PrintHelmholtz[assoc] reuses precomputed data"
+  {0, 0, 0},
+  TestID -> "[\"VectorPotentialA\"]: Curl[A] == r in 3D"
 ];
 
-(* Assumptions option propagates to the simplifier *)
+VerificationTest[
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["VectorPotentialA"],
+  $Failed,
+  {HelmholtzDecomposition::baddim},
+  TestID -> "[\"VectorPotentialA\"] in 2D -> $Failed with message"
+];
+
+(* ---- legacy List @@ form ---- *)
+
+VerificationTest[
+  List @@ HelmholtzDecomposition[{x^2 + y, x y}, {x, y}],
+  {{x^2 + y^2/2, x y}, {-(1/2) (-2 + y) y, 0}},
+  TestID -> "List @@ hd returns {g, r}"
+];
+
+VerificationTest[
+  AssociationQ @ Normal @ HelmholtzDecomposition[{x^2 + y, x y}, {x, y}],
+  True,
+  TestID -> "Normal[hd] returns the Association"
+];
+
+(* ---- coordinate auto-detection ---- *)
+
+VerificationTest[
+  HelmholtzDecomposition[{x^2 + y, x y}]["Gradient"],
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["Gradient"],
+  TestID -> "Auto-coord agrees with explicit coords"
+];
+
+(* ---- options ---- *)
+
 VerificationTest[
   Module[{P},
-    P = HelmholtzPotential[{a x^2, b y}, {x, y},
-          Assumptions -> a > 0 && b > 0];
-    Simplify[Grad[P, {x, y}] - HelmholtzGradient[{a x^2, b y}, {x, y}],
+    P = HelmholtzDecomposition[{a x^2, b y}, {x, y},
+          Assumptions -> a > 0 && b > 0]["Potential"];
+    Simplify[Grad[P, {x, y}] - HelmholtzDecomposition[{a x^2, b y}, {x, y}]["Gradient"],
             a > 0 && b > 0]
   ],
   {0, 0},
-  TestID -> "Assumptions option does not break correctness"
+  TestID -> "Assumptions option round-trips"
 ];
 
-(* Simplify -> Identity skips simplification (faster, larger output) *)
 VerificationTest[
-  AssociationQ@HelmholtzAssociation[{x^2 + y, x y}, {x, y}, Simplify -> Identity],
-  True,
-  TestID -> "Simplify -> Identity returns valid Association"
+  Head @ HelmholtzDecomposition[{x^2 + y, x y}, {x, y},
+            SimplificationFunction -> Identity],
+  HelmholtzDecomposition,
+  TestID -> "SimplificationFunction -> Identity returns valid object"
 ];
 
-(* Memoization: second call should be (near-)instantaneous *)
+(* ---- caching ---- *)
+
 VerificationTest[
-  Module[{f, xv, t1, t2},
-    f = {x^3 y + y^2, x y^2 - x^2};
-    xv = {x, y};
-    t1 = First @ AbsoluteTiming[HelmholtzAssociation[f, xv]];
-    t2 = First @ AbsoluteTiming[HelmholtzAssociation[f, xv]];
-    t2 < 0.01 || t2 < t1 / 5
+  Module[{f = {x^3 y + y^2, x y^2 - x^2}, xv = {x, y}, t1, t2},
+    ClearHelmholtzCache[];
+    t1 = First @ AbsoluteTiming[HelmholtzDecomposition[f, xv]];
+    t2 = First @ AbsoluteTiming[HelmholtzDecomposition[f, xv]];
+    t2 < t1 / 5
   ],
   True,
-  TestID -> "Memoization: repeat call is much faster"
+  TestID -> "Caching: repeat call is much faster"
+];
+
+VerificationTest[
+  Module[{f = {x^2, y^2}, xv = {x, y}, n},
+    ClearHelmholtzCache[];
+    HelmholtzDecomposition[f, xv];
+    n = ClearHelmholtzCache[];
+    n >= 1
+  ],
+  True,
+  TestID -> "ClearHelmholtzCache returns count"
+];
+
+VerificationTest[
+  Module[{f = {x^2, y^2}, xv = {x, y}},
+    ClearHelmholtzCache[];
+    HelmholtzDecomposition[f, xv, Caching -> False];
+    HelmholtzDecomposition[f, xv, Caching -> False];
+    ClearHelmholtzCache[]   (* should be 0 — nothing was stored *)
+  ],
+  0,
+  TestID -> "Caching -> False does not write to the cache"
+];
+
+(* Cache key includes the simplifier: switching produces a fresh entry, not a stale hit *)
+VerificationTest[
+  Module[{f = {x^2 + y, x y}, xv = {x, y}, hdFull, hdId},
+    ClearHelmholtzCache[];
+    hdId = HelmholtzDecomposition[f, xv, SimplificationFunction -> Identity];
+    hdFull = HelmholtzDecomposition[f, xv, SimplificationFunction -> FullSimplify];
+    Length[HelmholtzDecomposition`Private`$cache] === 2
+      && hdId =!= hdFull
+  ],
+  True,
+  TestID -> "Cache key includes SimplificationFunction"
+];
+
+(* TimeConstraint is honored *)
+VerificationTest[
+  Head @ HelmholtzDecomposition[{x^2 + y, x y}, {x, y}, TimeConstraint -> 30],
+  HelmholtzDecomposition,
+  TestID -> "TimeConstraint -> finite N is accepted"
+];
+
+VerificationTest[
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}, TimeConstraint -> -1],
+  $Failed,
+  {HelmholtzDecomposition::badtc},
+  TestID -> "TimeConstraint -> negative -> $Failed"
+];
+
+(* ---- introspection ---- *)
+
+VerificationTest[
+  Length @ HelmholtzDecomposition[{x^2 + y, x y, z}, {x, y, z}]["Coordinates"],
+  3,
+  TestID -> "Field dimension via Length @ hd[\"Coordinates\"]"
+];
+
+VerificationTest[
+  Keys @ HelmholtzDecomposition[{x^2 + y, x y}, {x, y}],
+  HelmholtzDecomposition[{x^2 + y, x y}, {x, y}]["Properties"],
+  TestID -> "Keys[hd] equals hd[\"Properties\"]"
 ];
 
 EndTestSection[]

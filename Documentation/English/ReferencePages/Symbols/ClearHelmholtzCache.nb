@@ -1,0 +1,15 @@
+Notebook[{Cell["ClearHelmholtzCache", "ObjectName"], 
+  Cell[BoxData[GridBox[{{Cell["ClearHelmholtzCache[]", "TableText"], 
+       Cell["empties the memoization cache used by HelmholtzDecomposition. \
+Returns the number of entries that were removed.", "TableText"]}}, 
+     ColumnsEqual -> False]], "Usage"], Cell["Details", "NotesSection"], 
+  Cell["HelmholtzDecomposition memoizes results on the tuple (f, xvec, \
+SimplificationFunction, Assumptions). For long-running notebooks computing \
+many distinct fields, this can grow without bound. ClearHelmholtzCache[] is \
+the manual escape hatch.", "Notes"], Cell["Pass Caching -> False to a \
+particular HelmholtzDecomposition call to skip the cache for that call only."\
+, "Notes"], Cell["Basic Examples", "PrimaryExamplesSection"], 
+  Cell[BoxData["HelmholtzDecomposition[{x^2, y^2}, {x, y}];"], "Input"], 
+  Cell[BoxData["ClearHelmholtzCache[]"], "Input"]}, 
+ StyleDefinitions -> FrontEnd`FileName[{"Wolfram"}, "Reference.nb", 
+   CharacterEncoding -> "UTF-8"]]

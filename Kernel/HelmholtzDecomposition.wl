@@ -2,132 +2,149 @@
 BeginPackage["HelmholtzDecomposition`"]
 
 (*
-This package provides functions to perform a Helmholtz decomposition of a vector field in n dimensions, following the approach in Richters and Glotz, "Analytical Helmholtz Decomposition of n-Dimensional Vector Fields", https://doi.org/10.1016/j.jmaa.2023.127138. The code has been taken from the corresponding Mathematica notebook (published in https://zenodo.org/records/7680297) and adapted to be used as a package.
-Any intellectual property rights of the original authors are fully respected. Please cite the original paper when using this code.
+This package provides the analytical Helmholtz decomposition of a vector field
+in n dimensions, following Richters & Glotzl, "Analytical Helmholtz Decomposition
+of n-Dimensional Vector Fields", https://doi.org/10.1016/j.jmaa.2023.127138.
+
+The algorithmic core is taken from the companion notebook published at
+https://zenodo.org/records/7680297; intellectual property of the original
+authors is fully respected. Please cite the original paper.
 *)
 
-HelmholtzDecomposition::usage = "HelmholtzDecomposition[f, xvec] returns {g, r} where f = g + r, g is curl-free and r is divergence-free. HelmholtzDecomposition[f] auto-detects the coordinates from the symbols appearing in f.";
+HelmholtzDecomposition::usage =
+  "HelmholtzDecomposition[f, xvec] returns a HelmholtzDecomposition[Association[\[Ellipsis]]] " <>
+  "object whose Properties give the Helmholtz decomposition f = g + r of the " <>
+  "vector field f with respect to the coordinates xvec. " <>
+  "HelmholtzDecomposition[f] auto-detects the coordinates from f.\n" <>
+  "Properties (access via hd[\"Name\"]):\n" <>
+  "  \"Gradient\"               g, the curl-free component\n" <>
+  "  \"Rotational\"             r, the divergence-free component\n" <>
+  "  \"Potential\"              P, scalar potential with Grad[P] == g\n" <>
+  "  \"AntisymmetricPotential\" Rij, the 2-form whose row-divergence is r\n" <>
+  "  \"VectorPotentialA\"       (3D only) vector A with Curl[A] == r\n" <>
+  "  \"PotentialMatrix\"        Fij, the underlying potential matrix\n" <>
+  "  \"Residual\"               f - g - r, simplified\n" <>
+  "  \"Field\"                  the input f\n" <>
+  "  \"Coordinates\"            the input xvec\n" <>
+  "  \"Verify\"                 <| GradientCurlFree, RotationalDivergenceFree, ResidualZero |> -- always uses FullSimplify regardless of SimplificationFunction\n" <>
+  "  \"Properties\"             list of available property names\n" <>
+  "  \"Association\"            the raw underlying Association";
 
-HelmholtzGradient::usage = "HelmholtzGradient[f, xvec] returns the curl-free (gradient) component g of the Helmholtz decomposition f = g + r.";
+ClearHelmholtzCache::usage =
+  "ClearHelmholtzCache[] empties the memoization cache of HelmholtzDecomposition. " <>
+  "Returns the number of entries removed.";
 
-HelmholtzRotational::usage = "HelmholtzRotational[f, xvec] returns the divergence-free (rotational) component r of the Helmholtz decomposition f = g + r.";
+(* Options live on the constructor head only *)
+Options[HelmholtzDecomposition] = {
+  SimplificationFunction :> FullSimplify,
+  Assumptions :> $Assumptions,
+  Verbose -> False,
+  Caching -> True,
+  TimeConstraint -> Infinity
+};
 
-HelmholtzPotential::usage = "HelmholtzPotential[f, xvec] returns the scalar potential P with Grad[P, xvec] == HelmholtzGradient[f, xvec].";
+(* Messages *)
+HelmholtzDecomposition::nomatch =
+  "Length[f] = `1` does not match Length[xvec] = `2`.";
 
-HelmholtzVectorPotential::usage = "HelmholtzVectorPotential[f, xvec] returns the antisymmetric matrix Rij such that the rotational component r satisfies r[[j]] == Sum[D[Rij[[j,i]], xvec[[i]]], i].";
+HelmholtzDecomposition::autocoord =
+  "Cannot auto-detect coordinates from a length-`1` field whose detected " <>
+  "symbols are `2`. Pass an explicit coordinate list as the second argument.";
 
-HelmholtzAssociation::usage = "HelmholtzAssociation[f, xvec] returns an Association with keys \"Gradient\", \"Rotational\", \"Potential\", \"VectorPotentialMatrix\", \"PotentialMatrix\", \"Residual\", \"Coordinates\", \"Field\". Computes the underlying potential matrix once and is cached on the (f, xvec) pair.";
+HelmholtzDecomposition::nodec =
+  "No analytic decomposition found for term `1` in component f_`2`. The " <>
+  "Richters-Glotzl construction handles polynomial, exponential, sine and " <>
+  "cosine atoms; mixed transcendentals may need to be split by hand.";
 
-PrintHelmholtz::usage = "PrintHelmholtz[f, xvec] (or PrintHelmholtz[f]) prints a full diagnostic of the Helmholtz decomposition and returns the same Association as HelmholtzAssociation. PrintHelmholtz[assoc] reuses an already-computed Association without redoing any work.";
+HelmholtzDecomposition::baddim =
+  "Property `1` is only defined for vector fields of dimension `2`. Got `3`.";
 
-SetVerbose::usage = "SetVerbose[True|False] enables or disables verbose output of the AutocalculateFij internals.";
+HelmholtzDecomposition::nokey =
+  "`1` is not a property of HelmholtzDecomposition. Valid properties: `2`.";
 
-GetVerbose::usage = "GetVerbose[] returns the current verbose setting.";
+HelmholtzDecomposition::badverbose =
+  "Verbose -> `1` is not True or False.";
 
-(* Options used by all surface functions *)
-Options[HelmholtzDecomposition]    = {Assumptions :> $Assumptions, Simplify -> FullSimplify};
-Options[HelmholtzGradient]         = Options[HelmholtzDecomposition];
-Options[HelmholtzRotational]       = Options[HelmholtzDecomposition];
-Options[HelmholtzPotential]        = Options[HelmholtzDecomposition];
-Options[HelmholtzVectorPotential]  = Options[HelmholtzDecomposition];
-Options[HelmholtzAssociation]      = Options[HelmholtzDecomposition];
-Options[PrintHelmholtz]            = Options[HelmholtzDecomposition];
+HelmholtzDecomposition::badcache =
+  "Caching -> `1` is not True or False.";
+
+HelmholtzDecomposition::badtc =
+  "TimeConstraint -> `1` is not Infinity or a positive number.";
 
 Begin["`Private`"]
 
 (* ============================================================ *)
-(* Verbose toggle                                                *)
+(* Cache                                                         *)
 (* ============================================================ *)
 
-$PrintInfo = False;
+$cache = <||>;
 
-SetVerbose[value_?BooleanQ] := ($PrintInfo = value);
-SetVerbose[value_] := (Message[SetVerbose::bool, value]; $Failed);
-SetVerbose::bool = "The argument `1` is not True or False.";
+ClearHelmholtzCache[] := With[{n = Length[$cache]}, $cache = <||>; n];
 
-GetVerbose[] := $PrintInfo;
-
-(* ============================================================ *)
-(* Configurable simplifier                                       *)
-(* Internal default is FullSimplify with $Assumptions; the public *)
-(* surface lets the user override both via options.              *)
-(* ============================================================ *)
-
-$simplify  = FullSimplify;
-$assumptions = True;
-
-withSimp[expr_] := $simplify[expr, $assumptions];
+(* Private throw tag so user-level Catch can't accidentally swallow our $Failed *)
+$throwTag = Unique["HelmholtzDecomposition$Throw"];
 
 (* ============================================================ *)
 (* Iterated integrals and incomplete Laplacians                  *)
 (* ============================================================ *)
 
-IntegrateXmP[func_, 0, m_, xvec_] := func;
-IntegrateXmP[func_, p_Integer?Positive, m_, xvec_] :=
-  Integrate[IntegrateXmP[func, p - 1, m, xvec], {xvec[[m]], 0, xvec[[m]]}];
+iterIntegrate[func_, 0, m_, xvec_] := func;
+iterIntegrate[func_, p_Integer?Positive, m_, xvec_] :=
+  Integrate[iterIntegrate[func, p - 1, m, xvec], {xvec[[m]], 0, xvec[[m]]}];
 
-LaplacianIncomplete[func_, m_, xvec_] := Laplacian[func, xvec] - D[func, {xvec[[m]], 2}];
+incompleteLaplacian[func_, m_, xvec_] :=
+  Laplacian[func, xvec] - D[func, {xvec[[m]], 2}];
 
-LaplacianIncompleteP[func_, 0, m_, xvec_] := func;
-LaplacianIncompleteP[func_, p_Integer?Positive, m_, xvec_] :=
-  LaplacianIncomplete[LaplacianIncompleteP[func, p - 1, m, xvec], m, xvec];
+incompleteLaplacianP[func_, 0, m_, xvec_] := func;
+incompleteLaplacianP[func_, p_Integer?Positive, m_, xvec_] :=
+  incompleteLaplacian[incompleteLaplacianP[func, p - 1, m, xvec], m, xvec];
 
 (* ============================================================ *)
 (* Variable extraction                                           *)
 (* ============================================================ *)
 
-headlist = {Or, And, Equal, Unequal, Less, LessEqual, Greater, GreaterEqual, Inequality};
+$headlist = {Or, And, Equal, Unequal, Less, LessEqual, Greater, GreaterEqual, Inequality};
 
-getAllVariables[f_?NumericQ] := {};
-getAllVariables[{}] := {};
-getAllVariables[t_] /; MemberQ[headlist, t] := {};
-getAllVariables[ll_List] := Flatten[Union[Map[getAllVariables[#] &, ll]]];
-getAllVariables[Derivative[_Integer][_][arg__]] := getAllVariables[{arg}];
-getAllVariables[f_Symbol[arg__]] :=
-  If[MemberQ[Attributes[f], NumericFunction] || MemberQ[headlist, f],
-    getAllVariables[{arg}],
+allVars[_?NumericQ] := {};
+allVars[{}] := {};
+allVars[t_] /; MemberQ[$headlist, t] := {};
+allVars[ll_List] := Flatten[Union[Map[allVars, ll]]];
+allVars[Derivative[_Integer][_][arg__]] := allVars[{arg}];
+allVars[f_Symbol[arg__]] :=
+  If[MemberQ[Attributes[f], NumericFunction] || MemberQ[$headlist, f],
+    allVars[{arg}],
     f[arg]
   ];
-getAllVariables[other_] := other;
-getUniqueVariables[all_] := Sort[DeleteDuplicates[Flatten[List[getAllVariables[all]]]]];
+allVars[other_] := other;
 
-(* Auto-detect coordinate vector. Used when xvec is omitted. *)
-autoDetectCoordinates[f_List] :=
-  Module[{vars = getUniqueVariables[f]},
-    If[Length[vars] =!= Length[f],
+uniqueVars[expr_] := Sort[DeleteDuplicates[Flatten[{allVars[expr]}]]];
+
+autoDetectCoordinates[f_] :=
+  Module[{vars = uniqueVars[f]},
+    If[Length[vars] === Length[f],
+      vars,
       Message[HelmholtzDecomposition::autocoord, Length[f], vars];
-      $Failed,
-      vars
+      $Failed
     ]
   ];
-
-HelmholtzDecomposition::autocoord =
-  "Cannot auto-detect coordinates: vector field has length `1` but the symbols `2` were found in the expression. Pass an explicit coordinate list as the second argument.";
 
 (* ============================================================ *)
 (* Potential matrix Fij (Theorem 6.1 of Richters & Glotzl)       *)
 (* ============================================================ *)
 
-CalculateFij[f_, k_, m_, lambda_, u_, W_, xvec_, dim_] :=
+calculateFij[f_, k_, m_, lambda_, u_, W_, xvec_, dim_] :=
   Module[{Fij, i, p, j},
-    On[Assert];
-    Assert[Length[f] == Length[xvec] == dim, "Length[f], Length[xvec] and dim must be identical"];
-    Assert[1 <= k <= dim, "k must be between 1 and dim"];
-    Assert[1 <= m <= dim, "m must be between 1 and dim"];
-    If[k != m,
-      Do[Assert[D[f[[k]], xvec[[i]]] === 0 || i == k || i == m], {i, dim}]
-    ];
-    Assert[
-      FullSimplify[D[W, {xvec[[m]], 2 lambda}] - f[[k]]] == 0,
-      "Differentiating W 2*lambda times wrt x_m must yield f_k"
-    ];
-    Assert[
-      FullSimplify[(-1)^lambda LaplacianIncompleteP[W, lambda, m, xvec] - (1 - u) f[[k]] == 0],
-      "Terminal condition not fulfilled"
-    ];
+    (* Assert is on by default; we don't toggle global state. If the user has
+       Off[Assert] set, that is their explicit choice — we honor it. *)
+    Assert[Length[f] == Length[xvec] == dim];
+    Assert[1 <= k <= dim];
+    Assert[1 <= m <= dim];
+    If[k != m, Do[Assert[D[f[[k]], xvec[[i]]] === 0 || i == k || i == m], {i, dim}]];
+    Assert[FullSimplify[D[W, {xvec[[m]], 2 lambda}] - f[[k]]] == 0];
+    Assert[FullSimplify[(-1)^lambda incompleteLaplacianP[W, lambda, m, xvec] - (1 - u) f[[k]] == 0]];
     Fij = Simplify[Table[
-      KroneckerDelta[k, i] * Sum[
-        (-1)^p / u * D[LaplacianIncompleteP[W, p, m, xvec], xvec[[j]], {xvec[[m]], 2 lambda - 2 p - 2}],
+      KroneckerDelta[k, i] Sum[
+        (-1)^p / u D[incompleteLaplacianP[W, p, m, xvec], xvec[[j]], {xvec[[m]], 2 lambda - 2 p - 2}],
         {p, 0, lambda - 1}
       ],
       {i, dim}, {j, dim}
@@ -135,12 +152,11 @@ CalculateFij[f_, k_, m_, lambda_, u_, W_, xvec_, dim_] :=
     Fij
   ];
 
-AutocalculateSingleFij[S_, k_, xvec_, dim_] :=
-  Module[{i, j, Singlef, xiWithoutxk, Q1, Q2, Q3, Q4, m, lambda, u, W,
-          v1, v2, xiInv1, xiInv2},
+autoSingleFij[S_, k_, xvec_, dim_, verb_] :=
+  Module[{i, j, Singlef, xiWithoutxk, Q1, Q2, Q3, Q4, m, lambda, u, W, v1, v2, xiInv1, xiInv2},
     If[S === 0, Return[Table[0, {i, dim}, {j, dim}]]];
     Singlef = Table[S KroneckerDelta[i, k], {i, dim}];
-    xiWithoutxk = Intersection[xvec, DeleteCases[getUniqueVariables[S], xvec[[k]]]];
+    xiWithoutxk = Intersection[xvec, DeleteCases[uniqueVars[S], xvec[[k]]]];
     Q1 = PolynomialQ[S, xiWithoutxk];
     Q2 = PolynomialQ[S, xvec] && Length[xiWithoutxk] == 1 &&
          Exponent[S, First[xiWithoutxk]] > Exponent[S, xvec[[k]]];
@@ -149,170 +165,217 @@ AutocalculateSingleFij[S_, k_, xvec_, dim_] :=
       m = If[Q1 && !Q2, k, First[Flatten[Position[xvec, First[xiWithoutxk]]]]];
       u = 1;
       lambda = Ceiling[(Total[Exponent[S, xvec]] - Exponent[S, xvec[[m]]] + 1) / 2];
-      W = IntegrateXmP[S, 2 lambda, m, xvec];
-      If[$PrintInfo, Print[S, " in f", k, " is partly monomial, use m=", m, ", lambda=", lambda]];
-      Return[CalculateFij[Singlef, k, m, lambda, u, W, xvec, dim]]
+      W = iterIntegrate[S, 2 lambda, m, xvec];
+      If[verb, Echo[{S, "in f", k, "polynomial branch", "m" -> m, "lambda" -> lambda}, "HelmholtzDecomposition"]];
+      Return[calculateFij[Singlef, k, m, lambda, u, W, xvec, dim]]
     ];
     v1 = FullSimplify[D[S, {xvec[[k]], 2}] / S];
-    v2 = FullSimplify[LaplacianIncomplete[S, k, xvec] / S];
-    xiInv1 = Intersection[xvec, getUniqueVariables[v1]];
-    xiInv2 = Intersection[xvec, getUniqueVariables[v2]];
+    v2 = FullSimplify[incompleteLaplacian[S, k, xvec] / S];
+    xiInv1 = Intersection[xvec, uniqueVars[v1]];
+    xiInv2 = Intersection[xvec, uniqueVars[v2]];
     Q4 = !(v1 === 0) && Length[xiInv1] == 0 && Length[xiInv2] == 0;
     If[Q4,
-      lambda = 1;
-      m = k;
-      W = S / v1;
-      u = 1 + v2 / v1;
-      If[$PrintInfo, Print[S, " in f", k, " can be solved with m=", m, ", lambda=", lambda, ", W=", W, ", u=", u]];
-      Return[CalculateFij[Singlef, k, m, lambda, u, W, xvec, dim]]
+      lambda = 1; m = k; W = S / v1; u = 1 + v2 / v1;
+      If[verb, Echo[{S, "in f", k, "trig/exp branch", "m" -> m, "W" -> W, "u" -> u}, "HelmholtzDecomposition"]];
+      Return[calculateFij[Singlef, k, m, lambda, u, W, xvec, dim]]
     ];
     Message[HelmholtzDecomposition::nodec, S, k];
-    Throw[$Failed, HelmholtzDecomposition]
+    Throw[$Failed, $throwTag]
   ];
 
-HelmholtzDecomposition::nodec =
-  "No analytic decomposition found for term `1` in component f_`2`. The Richters-Glotzl construction handles polynomial, exponential, sine and cosine atoms; mixed transcendentals may need to be split by hand.";
-
-AutocalculateFij[f_, xvec_, dim_] :=
+autoFij[f_, xvec_, dim_, verb_] :=
   Module[{M, Fij, Poly, pol, k},
     Fij = Table[0, {dim}, {dim}];
     Do[
       Poly = Expand[f[[k]]];
       Poly = If[Head[Poly] === Plus, List @@ Poly, {Poly}];
-      If[$PrintInfo, Print["k=", k, ": ", Poly]];
-      Do[
-        M = Poly[[pol]];
-        Fij = Fij + AutocalculateSingleFij[M, k, xvec, dim],
-        {pol, Length[Poly]}
-      ],
+      If[verb, Echo[{"k" -> k, Poly}, "HelmholtzDecomposition"]];
+      Do[M = Poly[[pol]]; Fij = Fij + autoSingleFij[M, k, xvec, dim, verb], {pol, Length[Poly]}],
       {k, dim}
     ];
     Fij
   ];
 
 (* ============================================================ *)
-(* Pieces extracted from Fij                                     *)
+(* Pieces extracted from Fij (simplifier-aware)                  *)
 (* ============================================================ *)
 
-ROTij[v_, xvec_, dim_] := withSimp[
-  Table[D[v[[i]], xvec[[j]]] - D[v[[j]], xvec[[i]]], {i, dim}, {j, dim}]
-];
+(* Uniform simplifier wrapper.
+   - Identity is special-cased because it only accepts one argument.
+   - Simplify/FullSimplify natively accept TimeConstraint -> tc and treat
+     Infinity as "no limit", so we always pass the option through. *)
+applySimp[Identity, expr_, _, _] := expr;
+applySimp[simp_, expr_, asm_, tc_] := simp[expr, asm, TimeConstraint -> tc];
 
-scalarPotentialFromFij[Fij_, dim_] := withSimp[Sum[Fij[[k, k]], {k, dim}]];
+scalarPotential[Fij_, simp_, asm_, tc_] :=
+  applySimp[simp, Sum[Fij[[k, k]], {k, Length[Fij]}], asm, tc];
 
-antisymmetricFromFij[Fij_] := withSimp[Fij - Transpose[Fij]];
+antisymPart[Fij_, simp_, asm_, tc_] :=
+  applySimp[simp, Fij - Transpose[Fij], asm, tc];
 
 (* ============================================================ *)
-(* Single-shot data builder, memoized on (f, xvec, opts)         *)
+(* Compute the data Association                                  *)
 (* ============================================================ *)
 
-ClearAll[iHelmholtzData];
-
-iHelmholtzData[f_List, xvec_List, simp_, asm_] :=
-  iHelmholtzData[f, xvec, simp, asm] =
-    Module[{dim, Fij, P, Rij, g, r, residual, $simplify = simp, $assumptions = asm},
-      On[Assert];
-      Assert[Length[f] == Length[xvec],
-        "Length of vector field f must match length of coordinate vector xvec"];
-      dim = Length[f];
-      Fij = Catch[AutocalculateFij[f, xvec, dim], HelmholtzDecomposition];
-      If[Fij === $Failed, Return[$Failed]];
-      P = scalarPotentialFromFij[Fij, dim];
-      Rij = antisymmetricFromFij[Fij];
-      g = withSimp[Grad[P, xvec]];
-      r = withSimp[Table[Sum[D[Rij[[j, i]], xvec[[i]]], {i, dim}], {j, dim}]];
-      residual = withSimp[f - g - r];
-      <|
-        "Gradient"              -> g,
-        "Rotational"            -> r,
-        "Potential"             -> P,
-        "VectorPotentialMatrix" -> Rij,
-        "PotentialMatrix"       -> Fij,
-        "Residual"              -> residual,
-        "Coordinates"           -> xvec,
-        "Field"                 -> f
-      |>
+hdCompute[f_, xvec_, simp_, asm_, verb_, tc_] :=
+  Module[{dim, Fij, P, Rij, g, r, residual, curlMatrix, divR, verify},
+    dim = Length[f];
+    Fij = autoFij[f, xvec, dim, verb];
+    P   = scalarPotential[Fij, simp, asm, tc];
+    Rij = antisymPart[Fij, simp, asm, tc];
+    g   = applySimp[simp, Grad[P, xvec], asm, tc];
+    r   = applySimp[simp, Table[Sum[D[Rij[[j, i]], xvec[[i]]], {i, dim}], {j, dim}], asm, tc];
+    residual = applySimp[simp, f - g - r, asm, tc];
+    (* Verify is precomputed: notebook display + ["Verify"] become O(1).
+       Always uses FullSimplify (independent of the user's SimplificationFunction
+       choice) so "verified" actually means verified. *)
+    curlMatrix = FullSimplify[
+      Table[D[g[[i]], xvec[[j]]] - D[g[[j]], xvec[[i]]], {i, dim}, {j, dim}],
+      asm, TimeConstraint -> tc
     ];
+    divR = FullSimplify[Sum[D[r[[i]], xvec[[i]]], {i, dim}], asm, TimeConstraint -> tc];
+    verify = <|
+      "GradientCurlFree"         -> curlMatrix === ConstantArray[0, {dim, dim}],
+      "RotationalDivergenceFree" -> divR === 0,
+      "ResidualZero"             -> residual === ConstantArray[0, dim]
+    |>;
+    <|
+      "Field"                  -> f,
+      "Coordinates"            -> xvec,
+      "Gradient"               -> g,
+      "Rotational"             -> r,
+      "Potential"              -> P,
+      "AntisymmetricPotential" -> Rij,
+      "PotentialMatrix"        -> Fij,
+      "Residual"               -> residual,
+      "Verify"                 -> verify
+    |>
+  ];
 
-(* Resolve options into (simp, asm) *)
-resolveOpts[opts_List, headSym_] := {
-  OptionValue[headSym, opts, Simplify],
-  OptionValue[headSym, opts, Assumptions]
+(* ============================================================ *)
+(* Public constructor                                            *)
+(* ============================================================ *)
+
+HelmholtzDecomposition[f_?VectorQ, xvec_?VectorQ, opts:OptionsPattern[]] :=
+  Module[{simp, asm, verb, cacheOpt, tc, key, raw, wrapped},
+    If[Length[f] =!= Length[xvec],
+      Message[HelmholtzDecomposition::nomatch, Length[f], Length[xvec]];
+      Return[$Failed]
+    ];
+    simp     = OptionValue[SimplificationFunction];
+    asm      = OptionValue[Assumptions];
+    verb     = OptionValue[Verbose];
+    cacheOpt = OptionValue[Caching];
+    tc       = OptionValue[TimeConstraint];
+    If[!BooleanQ[verb],
+      Message[HelmholtzDecomposition::badverbose, verb]; Return[$Failed]];
+    If[!BooleanQ[cacheOpt],
+      Message[HelmholtzDecomposition::badcache, cacheOpt]; Return[$Failed]];
+    If[!(tc === Infinity || (NumericQ[tc] && tc > 0)),
+      Message[HelmholtzDecomposition::badtc, tc]; Return[$Failed]];
+    key = {f, xvec, simp, asm, tc};
+    If[cacheOpt && KeyExistsQ[$cache, key], Return[$cache[key]]];
+    raw = Catch[hdCompute[f, xvec, simp, asm, verb, tc], $throwTag];
+    If[raw === $Failed, Return[$Failed]];
+    wrapped = HelmholtzDecomposition[raw];
+    If[cacheOpt, AssociateTo[$cache, key -> wrapped]];
+    wrapped
+  ];
+
+(* Auto-coord overload *)
+HelmholtzDecomposition[f_?VectorQ, opts:OptionsPattern[]] :=
+  Module[{xv = autoDetectCoordinates[f]},
+    If[xv === $Failed, $Failed, HelmholtzDecomposition[f, xv, opts]]
+  ];
+
+(* ============================================================ *)
+(* Property dispatch                                             *)
+(*                                                               *)
+(* All property access goes through a single dispatch[a, k]      *)
+(* function. Adding a new synthetic property is one line of      *)
+(* DownValues; no reliance on Mathematica's pattern-specificity  *)
+(* ordering between SubValue rules.                              *)
+(* ============================================================ *)
+
+$validProps = {
+  "Properties", "Association",
+  "Field", "Coordinates",
+  "Gradient", "Rotational",
+  "Potential", "AntisymmetricPotential", "PotentialMatrix",
+  "VectorPotentialA",
+  "Residual", "Verify"
 };
 
-(* ============================================================ *)
-(* Public API                                                    *)
-(* ============================================================ *)
-
-HelmholtzAssociation[f_List, xvec_List, opts:OptionsPattern[]] :=
-  Module[{simp, asm},
-    {simp, asm} = resolveOpts[{opts}, HelmholtzAssociation];
-    iHelmholtzData[f, xvec, simp, asm]
+(* Synthetic / computed properties. Each must take (a) and return its value
+   or $Failed (with a Message). Keys not listed here fall through to the
+   stored-Association lookup. *)
+dispatch[a_, "Properties"]  := $validProps;
+dispatch[a_, "Association"] := a;
+dispatch[a_, "VectorPotentialA"] :=
+  Module[{Rij = a["AntisymmetricPotential"], n = Length[a["Field"]]},
+    If[n =!= 3,
+      Message[HelmholtzDecomposition::baddim, "VectorPotentialA", 3, n];
+      $Failed,
+      {Rij[[2, 3]], Rij[[3, 1]], Rij[[1, 2]]}
+    ]
   ];
 
-HelmholtzDecomposition[f_List, xvec_List, opts:OptionsPattern[]] :=
-  Module[{d = HelmholtzAssociation[f, xvec, opts]},
-    If[AssociationQ[d], {d["Gradient"], d["Rotational"]}, $Failed]
-  ];
+(* Stored properties: present in the Association *)
+dispatch[a_, k_String] /; KeyExistsQ[a, k] := a[k];
 
-HelmholtzGradient[f_List, xvec_List, opts:OptionsPattern[]] :=
-  Replace[HelmholtzAssociation[f, xvec, opts], a_Association :> a["Gradient"]];
+(* Anything else *)
+dispatch[a_, k_] := (Message[HelmholtzDecomposition::nokey, k, $validProps]; $Failed);
 
-HelmholtzRotational[f_List, xvec_List, opts:OptionsPattern[]] :=
-  Replace[HelmholtzAssociation[f, xvec, opts], a_Association :> a["Rotational"]];
-
-HelmholtzPotential[f_List, xvec_List, opts:OptionsPattern[]] :=
-  Replace[HelmholtzAssociation[f, xvec, opts], a_Association :> a["Potential"]];
-
-HelmholtzVectorPotential[f_List, xvec_List, opts:OptionsPattern[]] :=
-  Replace[HelmholtzAssociation[f, xvec, opts], a_Association :> a["VectorPotentialMatrix"]];
-
-(* Auto-detect coordinates when xvec is omitted *)
-autoCall[head_, f_List, opts___] :=
-  Module[{xv = autoDetectCoordinates[f]},
-    If[xv === $Failed, $Failed, head[f, xv, opts]]
-  ];
-
-HelmholtzDecomposition[f_List, opts:OptionsPattern[]]      := autoCall[HelmholtzDecomposition,     f, opts];
-HelmholtzGradient[f_List, opts:OptionsPattern[]]           := autoCall[HelmholtzGradient,          f, opts];
-HelmholtzRotational[f_List, opts:OptionsPattern[]]         := autoCall[HelmholtzRotational,        f, opts];
-HelmholtzPotential[f_List, opts:OptionsPattern[]]          := autoCall[HelmholtzPotential,         f, opts];
-HelmholtzVectorPotential[f_List, opts:OptionsPattern[]]    := autoCall[HelmholtzVectorPotential,   f, opts];
-HelmholtzAssociation[f_List, opts:OptionsPattern[]]        := autoCall[HelmholtzAssociation,       f, opts];
+HelmholtzDecomposition[a_Association][k_] := dispatch[a, k];
 
 (* ============================================================ *)
-(* Diagnostic printer — returns the Association                  *)
+(* Backward-compat conveniences                                  *)
 (* ============================================================ *)
 
-printAssociation[data_Association] :=
-  Module[{xvec = data["Coordinates"], f = data["Field"], dim},
-    dim = Length[f];
-    Print["f   = ", MatrixForm[f]];
-    Print["Div f = ", Div[f, xvec]];
-    Print[OverBar["ROT"], " f = ", MatrixForm[ROTij[f, xvec, dim], TableSpacing -> {1, 3}]];
-    Print["Fij = ", MatrixForm[data["PotentialMatrix"], TableSpacing -> {1, 4}]];
-    Print["G (scalar potential) = ", data["Potential"]];
-    Print["Rij = ", MatrixForm[data["VectorPotentialMatrix"], TableSpacing -> {1, 4}]];
-    Print["g   = ", MatrixForm[data["Gradient"]]];
-    Print["r   = ", MatrixForm[data["Rotational"]]];
-    Print[OverBar["ROT"], " g = ", MatrixForm[ROTij[data["Gradient"], xvec, dim]]];
-    Print["Div r = ", FullSimplify[Div[data["Rotational"], xvec]]];
-    Print["f - g - r = ", MatrixForm[data["Residual"]]];
-    Print["f = g + r: ", data["Residual"] === ConstantArray[0, dim]];
-    data
+HelmholtzDecomposition /: Normal[HelmholtzDecomposition[a_Association]] := a;
+
+(* List @@ hd  ->  {g, r}  (for legacy callers expecting a tuple) *)
+HelmholtzDecomposition /: Apply[List, HelmholtzDecomposition[a_Association]] :=
+  {a["Gradient"], a["Rotational"]};
+
+(* Keys[hd] returns the queryable property names; users wanting field
+   dimension write Length[hd["Coordinates"]] explicitly. *)
+HelmholtzDecomposition /: Keys[HelmholtzDecomposition[a_Association]] := $validProps;
+
+(* ============================================================ *)
+(* Notebook display: collapsible summary box                     *)
+(* ============================================================ *)
+
+$wrappedKeys = {"Field", "Coordinates", "Gradient", "Rotational",
+  "Potential", "AntisymmetricPotential", "PotentialMatrix",
+  "Residual", "Verify"};
+
+wellFormedQ[a_Association] := SubsetQ[Keys[a], $wrappedKeys];
+
+HelmholtzDecomposition /: MakeBoxes[hd:HelmholtzDecomposition[a_Association?wellFormedQ], form:(StandardForm|TraditionalForm)] :=
+  BoxForm`ArrangeSummaryBox[
+    HelmholtzDecomposition,
+    hd,
+    None,
+    {
+      BoxForm`SummaryItem[{"dimension: ", Length[a["Field"]]}],
+      BoxForm`SummaryItem[{"coordinates: ", a["Coordinates"]}]
+    },
+    {
+      BoxForm`SummaryItem[{"potential: ", Short[a["Potential"], 1]}],
+      BoxForm`SummaryItem[{"all checks pass: ", AllTrue[a["Verify"], TrueQ]}]
+    },
+    form
   ];
 
-PrintHelmholtz[f_List, xvec_List, opts:OptionsPattern[]] :=
-  Replace[HelmholtzAssociation[f, xvec, opts], a_Association :> printAssociation[a]];
+(* ============================================================ *)
+(* Syntax / autocomplete metadata                                *)
+(* ============================================================ *)
 
-PrintHelmholtz[f_List, opts:OptionsPattern[]] :=
-  autoCall[PrintHelmholtz, f, opts];
+SyntaxInformation[HelmholtzDecomposition] = {
+  "ArgumentsPattern" -> {_, _., OptionsPattern[]}
+};
 
-PrintHelmholtz[data_Association] /;
-  SubsetQ[Keys[data], {"Gradient", "Rotational", "Potential",
-    "VectorPotentialMatrix", "PotentialMatrix", "Residual",
-    "Coordinates", "Field"}] := printAssociation[data];
-
-End[] (* End `Private` *)
+End[] (* `Private` *)
 
 EndPackage[]

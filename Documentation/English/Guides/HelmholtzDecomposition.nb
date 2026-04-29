@@ -1,0 +1,15 @@
+Notebook[{Cell["HelmholtzDecomposition", "GuideTitle"], 
+  Cell["Analytical Helmholtz decomposition of n-dimensional vector fields, \
+following Richters and Glotzl (2023).", "GuideAbstract"], 
+  Cell["Decomposing a vector field", "GuideFunctionsSection"], 
+  Cell["HelmholtzDecomposition", "InlineFunctionSans"], 
+  Cell["    construct the decomposition object f = g + r and access derived \
+quantities via properties", "GuideText"], Cell["Cache management", 
+   "GuideFunctionsSection"], Cell["ClearHelmholtzCache", 
+   "InlineFunctionSans"], Cell["    drop all memoized decomposition results", 
+   "GuideText"], Cell["Tutorials", "GuideTutorialsSection"], 
+  Cell[TextData[ButtonBox["Helmholtz decomposition tutorial", 
+     BaseStyle -> "Link", ButtonData -> 
+      "paclet:HelmholtzDecomposition/tutorial/HelmholtzDecompositionTutorial"]\
+], "GuideTutorial"]}, StyleDefinitions -> FrontEnd`FileName[{"Wolfram"}, 
+   "Guide.nb", CharacterEncoding -> "UTF-8"]]

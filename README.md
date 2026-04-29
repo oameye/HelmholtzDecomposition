@@ -1,17 +1,17 @@
 # HelmholtzDecomposition
 
-A Mathematica package for the analytical Helmholtz decomposition of vector fields in n dimensions, following Richters & Glötzl, *Analytical Helmholtz Decomposition of n-Dimensional Vector Fields* ([10.1016/j.jmaa.2023.127138](https://doi.org/10.1016/j.jmaa.2023.127138)). Given `f`, the decomposition
+Analytical Helmholtz decomposition of n-dimensional vector fields, following Richters & Glötzl, *Analytical Helmholtz Decomposition of n-Dimensional Vector Fields* ([10.1016/j.jmaa.2023.127138](https://doi.org/10.1016/j.jmaa.2023.127138)). Given a vector field `f`, the decomposition
 
 ```
-f = g + r,    Curl[g] = 0,    Div[r] = 0
+f = g + r,    Curl[g] == 0,    Div[r] == 0
 ```
 
-is constructed from a potential matrix `Fij`, with the scalar potential `P` (such that `g = ∇P`) and the antisymmetric matrix `Rij` (whose row-divergence is `r`) made directly available.
+is constructed once and exposed through a single function `HelmholtzDecomposition` returning a queryable result object.
 
 ## Install
 
 ```mathematica
-PacletInstall["https://github.com/oameye/HelmholtzDecomposition/releases/download/v1.1.0/HelmholtzDecomposition-1.1.0.paclet"]
+PacletInstall["https://github.com/oameye/HelmholtzDecomposition/releases/download/v2.0.0/HelmholtzDecomposition-2.0.0.paclet"]
 ```
 
 Or, working from a checkout:
@@ -26,58 +26,77 @@ Needs["HelmholtzDecomposition`"];
 ```mathematica
 Needs["HelmholtzDecomposition`"];
 
-f = {x^2 + y, x y};
+hd = HelmholtzDecomposition[{x^2 + y, x y}, {x, y}];
 
-(* Coordinates auto-detected from f *)
-{g, r} = HelmholtzDecomposition[f];
+hd["Gradient"]                 (* {x^2 + y^2/2, x y} *)
+hd["Rotational"]               (* {-(1/2)(-2 + y) y, 0} *)
+hd["Potential"]                (* scalar P with Grad[P] == g *)
+hd["Verify"]                   (* <|GradientCurlFree -> True, ...|> *)
 
-(* Scalar potential P with Grad[P] == g *)
-P = HelmholtzPotential[f];
-
-(* Everything in one shot, computed once and cached *)
-data = HelmholtzAssociation[f];
-data["Potential"]              (* P *)
-data["VectorPotentialMatrix"]  (* Rij *)
-data["Residual"]               (* should be {0, 0} *)
+List @@ hd                     (* {g, r}, handy for destructuring *)
 ```
 
-## API
+## API — one function, queryable result
 
-| Function | Returns |
+```mathematica
+hd = HelmholtzDecomposition[f, xvec, opts]   (* explicit coords *)
+hd = HelmholtzDecomposition[f, opts]         (* auto-detect coords from f *)
+```
+
+The result has head `HelmholtzDecomposition` and renders as a collapsible summary box in notebooks. It is queried by string property:
+
+| Property | Meaning |
 |---|---|
-| `HelmholtzDecomposition[f, xvec]` | `{g, r}` (gradient and rotational components) |
-| `HelmholtzGradient[f, xvec]` | `g` (curl-free component) |
-| `HelmholtzRotational[f, xvec]` | `r` (divergence-free component) |
-| `HelmholtzPotential[f, xvec]` | scalar `P` with `Grad[P, xvec] == g` |
-| `HelmholtzVectorPotential[f, xvec]` | antisymmetric matrix `Rij` whose row-divergence is `r` |
-| `HelmholtzAssociation[f, xvec]` | `Association` with all of the above plus `"PotentialMatrix"`, `"Residual"`, `"Coordinates"`, `"Field"` |
-| `PrintHelmholtz[f, xvec]` | prints a diagnostic block **and returns the same Association** |
-| `PrintHelmholtz[assoc]` | prints diagnostic for an already-computed Association (no recomputation) |
+| `"Gradient"` | curl-free component `g` |
+| `"Rotational"` | divergence-free component `r` |
+| `"Potential"` | scalar `P` with `Grad[P, xvec] == g` |
+| `"AntisymmetricPotential"` | the n-dimensional 2-form `Rij` whose row-divergence is `r` |
+| `"VectorPotentialA"` | (3D only) vector `A` with `Curl[A] == r` |
+| `"PotentialMatrix"` | the underlying potential matrix `Fij` |
+| `"Residual"` | `f - g - r`, simplified |
+| `"Verify"` | `<|"GradientCurlFree", "RotationalDivergenceFree", "ResidualZero"|>` |
+| `"Field"`, `"Coordinates"` | the inputs |
+| `"Properties"` | the list of valid property names |
+| `"Association"` | the raw underlying Association |
 
-The `xvec` argument is optional in every signature: omit it and the package extracts the coordinate symbols from `f`. Pass it explicitly when the field contains parameter symbols you don't want treated as coordinates.
+`List @@ hd` returns `{g, r}` (handy for destructuring), `Normal[hd]` returns the underlying Association, `Length[hd]` returns the field dimension. Querying an unknown property returns `$Failed` with a message.
 
 ### Options
 
-All surface functions accept the following options:
-
-- `Assumptions -> ...` — forwarded to the simplifier (`$Assumptions` by default). Important for parameterised fields where signs/positivity matter.
-- `Simplify -> FullSimplify | Simplify | Identity` — controls the simplifier applied to `g`, `r`, `P`, `Rij`. `Identity` skips simplification (fast, but verbose output).
-
 ```mathematica
-HelmholtzPotential[{a x^2, b y}, {x, y}, Assumptions -> a > 0 && b > 0]
-HelmholtzAssociation[bigField, coords, Simplify -> Identity]
+HelmholtzDecomposition[f, xvec,
+  SimplificationFunction -> FullSimplify,   (* or Simplify, Identity, ... *)
+  Assumptions :> $Assumptions,              (* forwarded to the simplifier *)
+  Verbose -> False,                         (* trace the algorithm via Echo *)
+  Caching -> True,                          (* memoize on (f, xvec, simp, asm, tc) *)
+  TimeConstraint -> Infinity                (* circuit breaker forwarded to the simplifier *)
+]
 ```
+
+`Identity` is special-cased so `SimplificationFunction -> Identity` skips simplification cleanly.
 
 ### Caching
 
-`HelmholtzAssociation[f, xvec, opts]` is memoized on the `(f, xvec, simplifier, assumptions)` tuple, so calling `HelmholtzPotential` and `HelmholtzGradient` back-to-back on the same field does the heavy `Fij` computation only once. All surface functions go through `HelmholtzAssociation` internally.
+Results are memoized by default on the tuple `(f, xvec, SimplificationFunction, Assumptions)`. Repeated calls cost effectively nothing. Drop the cache with `ClearHelmholtzCache[]` (returns the number of evicted entries), or pass `Caching -> False` for a single bypass.
 
-### Verbose mode
+### Failure modes
 
-```mathematica
-SetVerbose[True];   (* trace which atoms hit which branch of AutocalculateFij *)
-GetVerbose[]
-```
+The function returns `$Failed` (with a typed message under `HelmholtzDecomposition::*`) on:
+
+- length mismatch between `f` and `xvec` (`::nomatch`)
+- ambiguous coordinate auto-detection (`::autocoord`)
+- atomic terms outside the polynomial / exponential / sine / cosine grammar (`::nodec`)
+- query for an unknown property (`::nokey`)
+- query for `"VectorPotentialA"` outside 3D (`::baddim`)
+- non-boolean `Verbose` (`::badverbose`)
+
+## Notes
+
+**Simplifier contract.** `SimplificationFunction` must accept the call shape `simp[expr, asm, TimeConstraint -> tc]`. `FullSimplify`, `Simplify`, and the special-cased `Identity` all satisfy this. A custom simplifier `myFn[expr_] := ...` would receive arguments it doesn't expect; wrap with `Function[{e, _, _}, myFn[e]]` if needed.
+
+**Cache key is the symbolic expression.** The cache is keyed on `(f, xvec, simp, asm, tc)` as written, not on currently-bound values. If you call `HelmholtzDecomposition[{x^2}, {x}]`, then assign `x = 5`, then call again, the cached object is returned — even though `f` would now evaluate to `{25}`. This is the right semantic (the field is a symbolic expression, parameters bind at access) but worth knowing.
+
+**Property access re-evaluates.** `hd["Field"]` returns the stored expression and re-evaluates against current bindings. So `hd["Field"]` after `x = 5` evaluates to a numeric vector. Same caveat.
 
 ## Citation and license
 
